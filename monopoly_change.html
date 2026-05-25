@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>碳權大富翁：永續行動力</title>
+    <script src="questions.js"></script>
+    <style>
+        /* =========================================
+           大富翁原始 CSS
+           ========================================= */
+        :root {
+            --player1-color: #1976d2; --player2-color: #d32f2f;
+            --color-pollution: #8d6e63; --color-green: #4caf50;
+            --color-public: #b0bec5; --color-nature: #aed581; --color-special: #fff176;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex; justify-content: center; align-items: flex-start;
+            padding: 20px; background-color: #f0f7f0; gap: 30px;
+        }
+        #game-container { display: flex; flex-direction: column; }
+        #board {
+            display: grid; grid-template-columns: repeat(10, 70px); grid-template-rows: repeat(10, 70px);
+            border: 2px solid #333; position: relative; width: 700px; height: 700px;
+        }
+        .cell {
+            width: 70px; height: 70px; border: 1px solid #999; box-sizing: border-box; background-color: #fff;
+            display: flex; flex-direction: column; justify-content: flex-start; font-size: 10px; text-align: center; position: relative; overflow: hidden;
+        }
+        .cell-header {
+            flex-grow: 1; display: flex; align-items: center; justify-content: center; padding: 2px;
+            font-weight: bold; font-size: 11px; color: #000; border-bottom: 1px solid #999; word-break: break-word; line-height: 1.1; hyphens: auto;
+        }
+        .cell-footer { height: 18px; line-height: 18px; padding: 0; font-size: 12px; font-weight: bold; white-space: nowrap; flex-shrink: 0; background-color: rgba(255,255,255,0.3); }
+        .cell-header.group-pollution { background-color: var(--color-pollution); color: #fff; }
+        .cell-header.group-green { background-color: var(--color-green); color: #fff; }
+        .cell-header.group-public { background-color: var(--color-public); }
+        .cell-header.group-nature { background-color: var(--color-nature); }
+        .cell-header.group-special { background-color: var(--color-special); }
+        .cell-header.type-go, .cell-header.type-jail, .cell-header.type-free, .cell-header.type-goToJail { background-color: var(--color-special); padding: 2px; }
+        .cell.owner-0 { box-shadow: inset 0 0 0 5px var(--player1-color); }
+        .cell.owner-1 { box-shadow: inset 0 0 0 5px var(--player2-color); }
+        
+        .center-cell { position: absolute; top: 70px; left: 70px; width: 560px; height: 560px; display: block; pointer-events: none; }
+        
+        .center-logo { 
+            position: absolute; 
+            inset: 0; 
+            width: 100%; 
+            height: 100%; 
+            object-fit: cover; 
+            z-index: 0; 
+            opacity: 1; 
+        }
+        
+        #info-box { 
+            position: absolute; 
+            top: 51%; 
+            left: 50%; 
+            transform: translate(-50%, -50%); 
+            width: 250px;   
+            height: 280px;  
+            background-color: rgba(255, 255, 255, 0.95); 
+            color: #000;         
+            border: 3px solid #4caf50; 
+            border-radius: 12px; 
+            overflow-y: auto; 
+            font-size: 15px; 
+            line-height: 1.6;
+            padding: 15px;       
+            pointer-events: auto; 
+            z-index: 10; 
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6); 
+        }
+
+        #info-box::-webkit-scrollbar { width: 6px; }
+        #info-box::-webkit-scrollbar-track { background: transparent; }
+        #info-box::-webkit-scrollbar-thumb { background-color: rgba(0, 0, 0, 0.3); border-radius: 10px; }
+        #info-box::-webkit-scrollbar-thumb:hover { background-color: rgba(0, 0, 0, 0.5); }
+
+        .player { position: absolute; width: 22px; height: 22px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 2px 5px rgba(0,0,0,0.3); transition: all 0.5s ease-in-out; z-index: 10; }
+        
+        /* 玩家面板專用 CSS (左右分開) */
+        .ui-panel { width: 260px; display: flex; flex-direction: column; gap: 15px; transition: opacity 0.3s ease; }
+        .ui-widget { background-color: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 15px; }
+        .turn-indicator { font-size: 20px; font-weight: bold; text-align: center; }
+        .player-stats h3 { margin: 0 0 10px 0; border-bottom: 2px solid #eee; padding-bottom: 10px; font-size: 18px; text-align: center; }
+        .stat { font-size: 18px; margin: 12px 0; display: flex; align-items: center; justify-content: space-between; }
+        .stat span.money-display { color: #2e7d32; font-weight: bold; }
+        .stat span.carbon-display { color: #d32f2f; font-weight: bold; }
+        .carbon-bar-container { width: 100%; height: 20px; background-color: #e0e0e0; border-radius: 5px; overflow: hidden; border: 1px solid #ccc; margin-top: 5px; }
+        .carbon-bar-fill { width: 0%; height: 100%; background-color: #d32f2f; transition: width 0.5s; }
+        .controls { text-align: center; }
+        .roll-button { width: 100%; padding: 12px 25px; font-size: 18px; font-weight: bold; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; transition: all 0.3s; }
+        .roll-button:hover:not(:disabled) { background-color: #45a049; }
+        .roll-button:disabled { background-color: #e0e0e0; color: #888; cursor: not-allowed; }
+        .dice-display { font-size: 22px; font-weight: bold; margin-top: 15px; height: 38px; color: #333; }
+
+        #modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0, 0, 0, 0.6); z-index: 100; }
+        #modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; max-width: 500px; background-color: #fff; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.3); z-index: 101; overflow: hidden; }
+        .modal-content { padding: 25px; text-align: center; }
+        .modal-content h3 { margin-top: 0; color: #2e7d32; font-size: 24px; }
+        #modal-message { font-size: 18px; margin-bottom: 20px; min-height: 40px; line-height: 1.6; }
+        #modal-buttons { display: flex; flex-direction: column; gap: 10px; }
+        .modal-btn { display: block; width: 100%; padding: 12px; font-size: 16px; font-weight: bold; color: #333; background-color: #f0f0f0; border: 2px solid #ddd; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; }
+        .modal-btn:hover { background-color: #e0e0e0; border-color: #bbb; }
+        .modal-btn.primary { background-color: var(--color-green); color: white; border-color: var(--color-green); }
+        .modal-btn.primary:hover { background-color: #388e3c; border-color: #388e3c; }
+        .modal-hidden { display: none; }
+        
+        .lang-toggle { position: fixed; top: 10px; left: 10px; padding: 4px 10px; font-size: 12px; border-radius: 4px; border: 1px solid #555; background-color: #ffffffcc; cursor: pointer; z-index: 1000; }
+        .help-button { position: fixed; top: 10px; right: 10px; width: 28px; height: 28px; border-radius: 50%; border: 1px solid #555; background-color: #ffffffcc; color: #333; font-weight: bold; font-size: 16px; line-height: 26px; text-align: center; cursor: pointer; z-index: 1000; padding: 0; }
+        .help-button-tooltip { position: fixed; max-width: 400px; top: 45px; right: 10px; background-color: #333; color: #fff; padding: 8px 10px; border-radius: 6px; font-size: 20px; line-height: 1.4; z-index: 1000; box-shadow: 0 2px 6px rgba(0,0,0,0.3); display: none; white-space: pre-line; }
+        .help-button-tooltip.show { display: block; }
+        .restart-button { position: fixed; bottom: 10px; right: 10px; padding: 6px 14px; font-size: 12px; border-radius: 4px; border: 1px solid #555; background-color: #ffffffdd; color: #333; cursor: pointer; z-index: 1000; }
+        .report-button { position: fixed; bottom: 45px; right: 10px; padding: 6px 14px; font-size: 12px; border-radius: 4px; border: 1px solid #555; background-color: #e3f2fd; color: #0d47a1; cursor: pointer; z-index: 1000; }
+
+        #iframe-container {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background-color: rgba(0, 0, 0, 0.9); z-index: 2000;
+            display: none; justify-content: center; align-items: center;
+        }
+        #minigame-frame {
+            width: 100%; height: 100%; border: none; background: transparent;
+        }
+    </style>
+</head>
+<body>
+    <button id="lang-toggle" class="lang-toggle">EN</button>
+    <button id="help-button" class="help-button">?</button>
+    <button id="restart-button" class="restart-button">重新開始</button>
+    <button id="report-button" class="report-button">學習報告</button>
+
+    <!-- 玩家 1 面板 (固定於左側) -->
+    <div id="ui-panel-0" class="ui-panel">
+        <div class="ui-widget turn-widget" style="border-top: 5px solid var(--player1-color);">
+            <div id="turn-indicator-0" class="turn-indicator">玩家 1</div>
+        </div>
+        <div class="ui-widget player-stats">
+            <h3 class="status-title">玩家 1 狀態</h3>
+            <div class="stat"><span class="money-label">💰 金錢:</span> <span id="money-display-0" class="money-display">$1000</span></div>
+            <div class="stat"><span class="carbon-label">🏭 碳排:</span> <span id="carbon-display-0" class="carbon-display">0 / 100 CO₂</span></div>
+            <div class="carbon-bar-container"><div id="carbon-bar-fill-0" class="carbon-bar-fill"></div></div>
+        </div>
+        <div class="ui-widget controls">
+            <button id="roll-button-0" class="roll-button">擲骰子</button>
+            <div id="dice-display-0" class="dice-display"></div>
+        </div>
+    </div>
+
+    <!-- 遊戲棋盤 (固定於中間) -->
+    <div id="game-container">
+        <div id="board">
+            <div class="center-cell">
+                <img src="環保永續2D平面透明背景設計.png" alt="永續大富翁" class="center-logo" onerror="this.style.display='none'">
+                <div id="info-box" aria-live="polite">歡迎來到永續大富翁！</div>
+            </div>
+            <div class="cell" id="cell-0" style="grid-row: 10; grid-column: 1;"><div class="cell-header type-go">環評審查</div><div class="cell-footer">(監獄)</div></div>
+            <div class="cell" id="cell-1" style="grid-row: 10; grid-column: 2;"><div class="cell-header group-pollution">掩埋場</div><div class="cell-footer">$60</div></div>
+            <div class="cell" id="cell-2" style="grid-row: 10; grid-column: 3;"><div class="cell-header group-special">機會</div><div class="cell-footer">?</div></div>
+            <div class="cell" id="cell-3" style="grid-row: 10; grid-column: 4;"><div class="cell-header group-pollution">水泥廠</div><div class="cell-footer">$80</div></div>
+            <div class="cell" id="cell-4" style="grid-row: 10; grid-column: 5;"><div class="cell-header group-special">碳稅</div><div class="cell-footer">-$100</div></div>
+            <div class="cell" id="cell-5" style="grid-row: 10; grid-column: 6;"><div class="cell-header group-public">回收中心</div><div class="cell-footer">$150</div></div>
+            <div class="cell" id="cell-6" style="grid-row: 10; grid-column: 7;"><div class="cell-header group-nature">社區公園</div><div class="cell-footer">$100</div></div>
+            <div class="cell" id="cell-7" style="grid-row: 10; grid-column: 8;"><div class="cell-header group-special">命運</div><div class="cell-footer">?</div></div>
+            <div class="cell" id="cell-8" style="grid-row: 10; grid-column: 9;"><div class="cell-header group-nature">人造林</div><div class="cell-footer">$120</div></div>
+            <div class="cell" id="cell-9" style="grid-row: 10; grid-column: 10;"><div class="cell-header type-jail">起點</div><div class="cell-footer"></div></div>
+            <div class="cell" id="cell-35" style="grid-row: 9; grid-column: 1;"><div class="cell-header group-green">太陽能板</div><div class="cell-footer">$140</div></div>
+            <div class="cell" id="cell-34" style="grid-row: 8; grid-column: 1;"><div class="cell-header group-special">機會</div><div class="cell-footer">?</div></div>
+            <div class="cell" id="cell-33" style="grid-row: 7; grid-column: 1;"><div class="cell-header group-green">電動車廠</div><div class="cell-footer">$160</div></div>
+            <div class="cell" id="cell-32" style="grid-row: 6; grid-column: 1;"><div class="cell-header group-public">大眾運輸</div><div class="cell-footer">$200</div></div>
+            <div class="cell" id="cell-31" style="grid-row: 5; grid-column: 1;"><div class="cell-header group-pollution">石化工業</div><div class="cell-footer">$180</div></div>
+            <div class="cell" id="cell-30" style="grid-row: 4; grid-column: 1;"><div class="cell-header group-special">命運</div><div class="cell-footer">?</div></div>
+            <div class="cell" id="cell-29" style="grid-row: 3; grid-column: 1;"><div class="cell-header group-pollution">火力發電</div><div class="cell-footer">$200</div></div>
+            <div class="cell" id="cell-28" style="grid-row: 2; grid-column: 1;"><div class="cell-header group-public">水力公司</div><div class="cell-footer">$150</div></div>
+            <div class="cell" id="cell-27" style="grid-row: 1; grid-column: 1;"><div class="cell-header type-goToJail">碳匯中心</div><div class="cell-footer">(免費休息)</div></div>
+            <div class="cell" id="cell-26" style="grid-row: 1; grid-column: 2;"><div class="cell-header group-pollution">鋼鐵廠</div><div class="cell-footer">$220</div></div>
+            <div class="cell" id="cell-25" style="grid-row: 1; grid-column: 3;"><div class="cell-header group-special">機會</div><div class="cell-footer">?</div></div>
+            <div class="cell" id="cell-24" style="grid-row: 1; grid-column: 4;"><div class="cell-header group-pollution">塑膠工廠</div><div class="cell-footer">$240</div></div>
+            <div class="cell"id="cell-23" style="grid-row: 1; grid-column: 5;"><div class="cell-header group-public">高鐵</div><div class="cell-footer">$200</div></div>
+            <div class="cell" id="cell-22" style="grid-row: 1; grid-column: 6;"><div class="cell-header group-green">風力發電</div><div class="cell-footer">$260</div></div>
+            <div class="cell" id="cell-21" style="grid-row: 1; grid-column: 7;"><div class="cell-header group-special">命運</div><div class="cell-footer">?</div></div>
+            <div class="cell" id="cell-20" style="grid-row: 1; grid-column: 8;"><div class="cell-header group-green">研發中心</div><div class="cell-footer">$280</div></div>
+            <div class="cell" id="cell-19" style="grid-row: 1; grid-column: 9;"><div class="cell-header group-public">電力公司</div><div class="cell-footer">$150</div></div>
+            <div class="cell" id="cell-18" style="grid-row: 1; grid-column: 10;"><div class="cell-header type-free">重大污染</div><div class="cell-footer">(前往環評)</div></div>
+            <div class="cell" id="cell-17" style="grid-row: 2; grid-column: 10;"><div class="cell-header group-nature">濕地公園</div><div class="cell-footer">$300</div></div>
+            <div class="cell" id="cell-16" style="grid-row: 3; grid-column: 10;"><div class="cell-header group-special">機會</div><div class="cell-footer">?</div></div>
+            <div class="cell" id="cell-15" style="grid-row: 4; grid-column: 10;"><div class="cell-header group-nature">國家公園</div><div class="cell-footer">$320</div></div>
+            <div class="cell" id="cell-14" style="grid-row: 5; grid-column: 10;"><div class="cell-header group-public">捷運</div><div class="cell-footer">$200</div></div>
+            <div class="cell" id="cell-13" style="grid-row: 6; grid-column: 10;"><div class="cell-header group-green">地熱發電</div><div class="cell-footer">$350</div></div>
+            <div class="cell" id="cell-12" style="grid-row: 7; grid-column: 10;"><div class="cell-header group-special">命運</div><div class="cell-footer">?</div></div>
+            <div class="cell" id="cell-11" style="grid-row: 8; grid-column: 10;"><div class="cell-header group-special">奢侈稅</div><div class="cell-footer">-$150</div></div>
+            <div class="cell" id="cell-10" style="grid-row: 9; grid-column: 10;"><div class="cell-header group-green">碳捕捉廠</div><div class="cell-footer">$400</div></div>
+        </div>
+    </div>
+
+    <!-- 玩家 2 面板 (固定於右側) -->
+    <div id="ui-panel-1" class="ui-panel">
+        <div class="ui-widget turn-widget" style="border-top: 5px solid var(--player2-color);">
+            <div id="turn-indicator-1" class="turn-indicator">玩家 2</div>
+        </div>
+        <div class="ui-widget player-stats">
+            <h3 class="status-title">玩家 2 狀態</h3>
+            <div class="stat"><span class="money-label">💰 金錢:</span> <span id="money-display-1" class="money-display">$1000</span></div>
+            <div class="stat"><span class="carbon-label">🏭 碳排:</span> <span id="carbon-display-1" class="carbon-display">0 / 100 CO₂</span></div>
+            <div class="carbon-bar-container"><div id="carbon-bar-fill-1" class="carbon-bar-fill"></div></div>
+        </div>
+        <div class="ui-widget controls">
+            <button id="roll-button-1" class="roll-button">擲骰子</button>
+            <div id="dice-display-1" class="dice-display"></div>
+        </div>
+    </div>
+
+    <div id="modal-overlay" class="modal-hidden"></div>
+    <div id="modal" class="modal-hidden">
+        <div class="modal-content">
+            <h3 id="modal-title">彈窗標題</h3>
+            <p id="modal-message">彈窗訊息...</p>
+            <div id="modal-buttons"></div>
+        </div>
+    </div>
+
+    <div id="iframe-container">
+        <iframe id="minigame-frame" src=""></iframe>
+    </div>
+
+    <script>
+    const GAME_TITLE_ZH = "碳權大富翁\n永續行動力";
+    const GAME_TITLE_EN = "Carbon Tycoon\n The Sustainability Drive";
+    let currentLang = 'zh';
+
+    document.addEventListener('DOMContentLoaded', () => {
+      let availableQuestions = [];
+
+      function shuffleQuestionDeck() {
+        if (typeof monopolyQuestionBank === 'undefined') return;
+        availableQuestions = Array.from({length: monopolyQuestionBank.length}, (_, i) => i);
+        for (let i = availableQuestions.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [availableQuestions[i], availableQuestions[j]] = [availableQuestions[j], availableQuestions[i]];
+        }
+      }
+
+      const NUM_PLAYERS = 2;
+      const MAX_CARBON = 100;
+      const JAIL_FEE = 50;
+      const JAIL_POSITION = 9;
+
+      const players = [];
+      let currentPlayerIndex = 0;
+      const properties = {};
+
+      const boardPath = [
+        'cell-9', 'cell-8', 'cell-7', 'cell-6', 'cell-5', 'cell-4', 'cell-3', 'cell-2', 'cell-1', 'cell-0',
+        'cell-35', 'cell-34', 'cell-33', 'cell-32', 'cell-31', 'cell-30', 'cell-29', 'cell-28', 'cell-27', 'cell-26',
+        'cell-25', 'cell-24', 'cell-23', 'cell-22', 'cell-21', 'cell-20', 'cell-19', 'cell-18', 'cell-17', 'cell-16',
+        'cell-15', 'cell-14', 'cell-13', 'cell-12', 'cell-11', 'cell-10'
+      ];
+
+      const cellData = [
+        { id: 0,  name: "環評審查", nameEn: "EIA Review",    type: "jail",     group: "special" },
+        { id: 1,  name: "掩埋場",   nameEn: "Landfill",      type: "property", group: "pollution", cost: 60,  rent: 6,  carbonEffect: 30 },
+        { id: 2,  name: "機會",     nameEn: "Chance",        type: "chance",   group: "special" },
+        { id: 3,  name: "水泥廠",   nameEn: "Cement Plant",  type: "property", group: "pollution", cost: 80,  rent: 8,  carbonEffect: 40 },
+        { id: 4,  name: "碳稅",     nameEn: "Carbon Tax",    type: "tax",      group: "special",  moneyEffect: -100, carbonEffect: 0 },
+        { id: 5,  name: "回收中心", nameEn: "Recycling Center", type: "property", group: "public",   cost: 150, rent: 15, carbonEffect: 10 },
+        { id: 6,  name: "社區公園", nameEn: "Community Park",   type: "nature",   group: "nature",  cost: 100, rent: 10, carbonEffect: 5 },
+        { id: 7,  name: "命運",     nameEn: "Fate",             type: "fate",     group: "special" }, 
+        { id: 8,  name: "人造林",   nameEn: "Plantation",       type: "nature",   group: "nature",  cost: 120, rent: 12, carbonEffect: 8 },{ id: 9,  name: "起點",     nameEn: "Start",        type: "go",       group: "special",  moneyEffect: 200, carbonEffect: 5 },
+        { id: 10, name: "碳捕捉廠", nameEn: "Carbon Capture",   type: "property", group: "green",   cost: 400, rent: 40, carbonEffect: 20 },
+        { id: 11, name: "奢侈稅",   nameEn: "Luxury Tax",       type: "tax",      group: "special", moneyEffect: -150, carbonEffect: 0 },
+        { id: 12, name: "命運",     nameEn: "Fate",             type: "fate",     group: "special" }, 
+        { id: 13, name: "地熱發電", nameEn: "Geothermal Power", type: "property", group: "green",   cost: 350, rent: 35, carbonEffect: 15 },
+        { id: 14, name: "捷運",     nameEn: "Metro",            type: "property", group: "public",  cost: 200, rent: 20, carbonEffect: 10 },
+        { id: 15, name: "國家公園", nameEn: "National Park",    type: "nature",   group: "nature",  cost: 320, rent: 30, carbonEffect: 10 },
+        { id: 16, name: "機會",     nameEn: "Chance",           type: "chance",   group: "special" },
+        { id: 17, name: "濕地公園", nameEn: "Wetland Park",     type: "nature",   group: "nature",  cost: 300, rent: 28, carbonEffect: 10 },
+        { id: 18, name: "重大污染", nameEn: "Major Pollution",  type: "goToJail", group: "special" },
+        { id: 19, name: "電力公司", nameEn: "Power Company",    type: "property", group: "public",  cost: 150, rent: 15, carbonEffect: 10 },
+        { id: 20, name: "研發中心", nameEn: "R&D Center",       type: "property", group: "green",   cost: 280, rent: 24, carbonEffect: 12 },
+        { id: 21, name: "命運",     nameEn: "Fate",             type: "fate",     group: "special" }, 
+        { id: 22, name: "風力發電", nameEn: "Wind Power",       type: "property", group: "green",   cost: 260, rent: 22, carbonEffect: 15 },
+        { id: 23, name: "高鐵",     nameEn: "High Speed Rail",  type: "property", group: "public",  cost: 200, rent: 20, carbonEffect: 10 },
+        { id: 24, name: "塑膠工廠", nameEn: "Plastic Factory",  type: "property", group: "pollution", cost: 240, rent: 20, carbonEffect: 70 },
+        { id: 25, name: "機會",     nameEn: "Chance",           type: "chance",   group: "special" },
+        { id: 26, name: "鋼鐵廠",   nameEn: "Steel Mill",       type: "property", group: "pollution", cost: 220, rent: 18, carbonEffect: 60 },
+        { id: 27, name: "碳匯中心", nameEn: "Carbon Sink Center", type: "free", group: "special" },
+        { id: 28, name: "水力公司", nameEn: "Hydro Company",    type: "property", group: "public",  cost: 150, rent: 15, carbonEffect: 10 },
+        { id: 29, name: "火力發電", nameEn: "Thermal Power",    type: "property", group: "pollution", cost: 200, rent: 16, carbonEffect: 80 },
+        { id: 30, name: "命運",     nameEn: "Fate",             type: "fate",     group: "special" }, 
+        { id: 31, name: "石化工業", nameEn: "Petrochemical",    type: "property", group: "pollution", cost: 180, rent: 14, carbonEffect: 70 },{ id: 32, name: "大眾運輸", nameEn: "Public Transport", type: "property", group: "public",  cost: 200, rent: 20, carbonEffect: 10 },
+        { id: 33, name: "電動車廠", nameEn: "EV Factory",       type: "property", group: "green",   cost: 160, rent: 12, carbonEffect: 8 },
+        { id: 34, name: "機會",     nameEn: "Chance",           type: "chance",   group: "special" },
+        { id: 35, name: "太陽能板", nameEn: "Solar Panels",     type: "property", group: "green",   cost: 140, rent: 10, carbonEffect: 5 }
+      ];
+
+      const playerColors = ['var(--player1-color)', 'var(--player2-color)'];
+      const board = document.getElementById('board');
+      const infoBox = document.getElementById('info-box');
+      const modalOverlay = document.getElementById('modal-overlay');
+      const modal = document.getElementById('modal');
+
+      function updateUI() {
+        players.forEach(p => {
+          // 更新金錢與碳排數值
+          document.getElementById(`money-display-${p.id}`).textContent = `$${p.money}`;
+          document.getElementById(`carbon-display-${p.id}`).textContent = `${p.carbon} / ${MAX_CARBON} CO₂`;
+          
+          // 更新進度條
+          const carbonPercentage = Math.min((p.carbon / MAX_CARBON) * 100, 100);
+          const barFill = document.getElementById(`carbon-bar-fill-${p.id}`);
+          barFill.style.width = `${carbonPercentage}%`;
+          barFill.style.backgroundColor = (carbonPercentage > 80) ? '#f44336' : '#d32f2f';
+
+          // 更新按鈕與面板狀態
+          const rollBtn = document.getElementById(`roll-button-${p.id}`);
+          const panel = document.getElementById(`ui-panel-${p.id}`);
+          const turnIndicator = document.getElementById(`turn-indicator-${p.id}`);
+
+          if (p.id === currentPlayerIndex) {
+              rollBtn.disabled = false;
+              panel.style.opacity = "1";
+              turnIndicator.textContent = currentLang === 'zh' ? `🎲 輪到 玩家 ${p.id + 1}` : `🎲 Player ${p.id + 1}'s turn`;
+              turnIndicator.style.color = p.tokenColor;
+          } else {
+              rollBtn.disabled = true;
+              panel.style.opacity = "0.6"; // 讓未輪到的玩家面板變暗
+              turnIndicator.textContent = currentLang === 'zh' ? `等待中...` : `Waiting...`;
+              turnIndicator.style.color = "#888";
+          }
+        });
+      }
+
+      function movePlayerToken(playerId, logicalPosition) {
+        const token = document.getElementById(`player-${playerId}`);
+        const cellId = boardPath[logicalPosition];
+        const rect = document.getElementById(cellId).getBoundingClientRect();
+        const brd = board.getBoundingClientRect();
+        token.style.top = `${rect.top - brd.top + 24 + playerId * 5}px`;
+        token.style.left = `${rect.left - brd.left + 24 + playerId * 5}px`;
+      }
+
+      function logInfo(message) {
+        infoBox.innerHTML = infoBox.innerHTML + "<br><br>" + message;
+        infoBox.scrollTop = infoBox.scrollHeight;
+      }
+
+      function applyLanguage(lang) {
+        currentLang = lang;
+        cellData.forEach(cell => {
+          const header = document.querySelector(`#cell-${cell.id} .cell-header`);
+          if (header) header.textContent = lang === 'zh' ? cell.name : (cell.nameEn || cell.name);
+        });
+        document.getElementById('restart-button').textContent = lang === 'zh' ? "重新開始" : "Restart";
+        document.getElementById('report-button').textContent = lang === 'zh' ? "學習報告" : "Report";
+        document.getElementById('lang-toggle').textContent = lang === 'zh' ? 'EN' : '中';
+        
+        // 更新左右兩邊面板的靜態文字
+        document.querySelectorAll('.status-title').forEach((el, index) => {
+            el.textContent = lang === 'zh' ? `玩家 ${index + 1} 狀態` : `Player ${index + 1} Stats`;
+        });
+        document.querySelectorAll('.money-label').forEach(el => el.textContent = lang === 'zh' ? "💰 金錢:" : "💰 Money:");
+        document.querySelectorAll('.carbon-label').forEach(el => el.textContent = lang === 'zh' ? "🏭 碳排:" : "🏭 Carbon:");
+        document.querySelectorAll('.roll-button').forEach(el => el.textContent = lang === 'zh' ? "擲骰子" : "Roll");
+        
+        document.title = lang === 'zh' ? `${GAME_TITLE_ZH.replace('\n', ' ')}` : `${GAME_TITLE_EN.replace('\n', ' ')}`;
+        
+        updateUI();
+      }
+
+      async function askQuiz(player) {
+        if (typeof monopolyQuestionBank === 'undefined') return true; 
+        if (!player) player = players[currentPlayerIndex];
+        if (availableQuestions.length === 0) shuffleQuestionDeck();
+
+        const qIndex = availableQuestions.pop();
+        const quiz = monopolyQuestionBank[qIndex];
+        const isZh = (currentLang === 'zh');
+        
+        const questionText = isZh ? quiz.question : (quiz.questionEn || quiz.question);
+        const optionsToUse = isZh ? quiz.options : (quiz.optionsEn || quiz.options);
+        const letterMap = ['A', 'B', 'C', 'D'];
+
+        const buttons = optionsToUse.map((option, index) => ({ text: `${letterMap[index]}. ${option}`, value: index }));
+        const title = isZh ? "🌍 環保知識問答" : "🌍 Green Quiz";
+        
+        const selectedIndex = await showModal(title, questionText, buttons);
+        
+        player.stats.totalQuestions++;
+        const correctText = optionsToUse[quiz.correctIndex];
+        const correctAnswerLabel = `${letterMap[quiz.correctIndex]}. ${correctText}`;
+        const playerAnswerLabel = `${letterMap[selectedIndex]}. ${optionsToUse[selectedIndex]}`;
+        const isCorrect = (selectedIndex === quiz.correctIndex);
+
+        if (isCorrect) {
+          player.stats.correctCount++;
+          alert(isZh ? "✅ 回答正確！" : "✅ Correct!");
+        } else {
+          player.stats.mistakes.push({ q: questionText, yourAns: playerAnswerLabel, correctAns: correctAnswerLabel });
+          alert(isZh ? `❌ 回答錯誤！\n\n正確答案是: ${correctAnswerLabel}\n(已加入錯題本)` : `❌ Wrong answer!\n\nCorrect: ${correctAnswerLabel}\n(Added to review list)`);
+        }
+        return isCorrect;
+      }
+
+      function showModal(title, message, buttons) {
+        return new Promise(resolve => {
+          document.getElementById('modal-title').textContent = title;
+          document.getElementById('modal-message').innerHTML = message.replace(/\n/g, '<br>');
+          const modalButtons = document.getElementById('modal-buttons');
+          modalButtons.innerHTML = '';
+          
+          buttons.forEach(btnInfo => {
+            const button = document.createElement('button');
+            button.className = `modal-btn ${btnInfo.cssClass || ''}`;
+            button.textContent = btnInfo.text;
+            button.onclick = () => {
+              modalOverlay.classList.add('modal-hidden');
+              modal.classList.add('modal-hidden');
+              resolve(btnInfo.value);
+            };
+            modalButtons.appendChild(button);
+          });
+          modalOverlay.classList.remove('modal-hidden');
+          modal.classList.remove('modal-hidden');
+        });
+      }
+
+      const iframeContainer = document.getElementById('iframe-container');
+      const minigameFrame = document.getElementById('minigame-frame');
+      let minigameResolver = null;
+
+      window.addEventListener('message', function(event) {
+          if (event.data.type === 'SWIPE_GAME_FINISHED' || event.data.type === 'MEMORY_GAME_FINISHED') {
+              iframeContainer.style.display = 'none';
+              minigameFrame.src = ""; 
+              if (minigameResolver) {
+                  minigameResolver(event.data);
+                  minigameResolver = null;
+              }
+          }
+      });
+
+      function triggerMinigame(player, gameHtml, extraParams = "") {
+          return new Promise((resolve) => {
+              minigameResolver = resolve;
+              minigameFrame.src = `${gameHtml}?lang=${currentLang}${extraParams}`;
+              iframeContainer.style.display = 'flex';
+          });
+      }
+
+      async function rollDice() {
+        const player = players[currentPlayerIndex];
+        
+        // 防止連續點擊
+        document.getElementById(`roll-button-${player.id}`).disabled = true;
+
+        if (player.isInJail) {
+          logInfo(currentLang === 'zh' ? `你正在「環評審查」中...` : `You are in EIA Review...`);
+          if (player.money >= JAIL_FEE) {
+            const decision = await showModal(
+              currentLang === 'zh' ? "⛓ 環評審查" : "⛓ EIA Review",
+              currentLang === 'zh' ? `支付 $${JAIL_FEE} 並回答問題來離開？` : `Pay $${JAIL_FEE} and answer a quiz to leave?`,
+              [{ text: currentLang === 'zh' ? `支付 $${JAIL_FEE}` : `Pay $${JAIL_FEE}`, value: 'pay', cssClass: 'primary' }, { text: currentLang === 'zh' ? "繼續留下" : "Stay", value: 'stay' }]
+            );
+            if (decision === 'pay') {
+              const isCorrect = await askQuiz(player);
+              if (isCorrect) {
+                player.money -= JAIL_FEE;
+                player.isInJail = false;
+                logInfo(currentLang === 'zh' ? `成功支付罰款！` : `Fine paid successfully!`);
+              } else {
+                logInfo(currentLang === 'zh' ? "回答錯誤！繼續拘留。" : "Wrong answer! Stay in EIA.");
+              }
+            }
+          } else { logInfo(currentLang === 'zh' ? `金錢不足。` : `Not enough money.`); }
+          nextTurn(); return;
+        }
+
+        const dice1 = Math.floor(Math.random() * 6) + 1;
+        const dice2 = Math.floor(Math.random() * 6) + 1;
+        const roll = dice1 + dice2;
+        
+        const diceFaces = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+        const face1 = diceFaces[dice1 - 1];
+        const face2 = diceFaces[dice2 - 1];
+
+        // 顯示結果在當前玩家專屬的控制區塊
+        const diceDisplay = document.getElementById(`dice-display-${player.id}`);
+        diceDisplay.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+            <span style="font-size: 38px; line-height: 1;">${face1} ${face2}</span>
+            <span>${roll}</span>
+        </div>`;
+        
+        logInfo(currentLang === 'zh' ? `[玩家 ${player.id + 1}] 擲出了 ${face1} ${face2}，共移動 ${roll} 步。` : `[Player ${player.id + 1}] rolled ${face1} ${face2}, moving ${roll} steps.`);
+
+        const oldPos = player.position;
+        player.position = (oldPos + roll) % boardPath.length;
+        if (player.position < oldPos) {
+           player.money += 200; applyCarbonEffect(player, 5);
+           logInfo(currentLang === 'zh' ? `經過起點，領取 $200。` : `Passed Start, collect $200.`);
+        }
+        
+        movePlayerToken(player.id, player.position);
+        await new Promise(r => setTimeout(r, 600));
+
+        const cell = cellData[parseInt(boardPath[player.position].split('-')[1])];
+        await handleLandOnCell(player, cell);
+        
+        if (checkGameStatus(player)) nextTurn();
+      }
+
+      function applyCarbonEffect(player, carbonEffect) {
+        if (carbonEffect !== 0) {
+           player.carbon = Math.max(0, player.carbon + carbonEffect);
+           logInfo(currentLang === 'zh' ? `碳排變更: ${carbonEffect > 0 ? '+'+carbonEffect : carbonEffect} CO₂` : `Carbon change: ${carbonEffect > 0 ? '+'+carbonEffect : carbonEffect} CO₂`);
+        }
+      }
+
+      async function handleLandOnCell(player, cell) {
+        logInfo(currentLang === 'zh' ? `踩到了 [${cell.name}]。` : `Landed on [${cell.nameEn || cell.name}].`);
+        switch (cell.type) {
+          case 'chance':
+            logInfo(currentLang === 'zh' ? "🎯 機會：準備進行「塑戰速決」滑動挑戰！" : "Chance: Prepare for the Swipe Challenge!");
+            
+            const result = await triggerMinigame(player, 'swipeGame.html', 3); 
+            
+            const correctCount = result.score;
+            player.stats.totalQuestions += result.totalPlayed;
+            player.stats.correctCount += correctCount;
+            if (result.mistakes && result.mistakes.length > 0) {
+                player.stats.mistakes.push(...result.mistakes);
+            }
+
+            let popupTitle = currentLang === 'zh' ? "🎯 挑戰結算" : "🎯 Challenge Result";
+            let popupMessage = "";
+
+            if (correctCount > 0) {
+                const bonusMoney = correctCount * 50;
+                const bonusCarbon = correctCount * 10;
+                player.money += bonusMoney;
+                applyCarbonEffect(player, -bonusCarbon);
+                logInfo(currentLang === 'zh' ? `🎉 挑戰結束！答對 ${correctCount} 題，獲得 $${bonusMoney} 並減少 ${bonusCarbon} CO₂！` : `Challenge over! Got ${correctCount} right. Earned $${bonusMoney} & -${bonusCarbon} CO₂!`);
+                
+                popupMessage = currentLang === 'zh' 
+                  ? `🎉 挑戰結束！答對 ${correctCount} 題\n獲得 $${bonusMoney} 並減少 ${bonusCarbon} CO₂！\n(碳排變更: -${bonusCarbon} CO₂)`
+                  : `🎉 Challenge over! Got ${correctCount} right\nEarned $${bonusMoney} & -${bonusCarbon} CO₂!\n(Carbon change: -${bonusCarbon} CO₂)`;
+
+            } else {
+                applyCarbonEffect(player, 15);
+                logInfo(currentLang === 'zh' ? "💀 挑戰失敗！一題都沒答對，遭罰增加 15 CO₂ 碳排！" : "Challenge failed! 0 correct, +15 CO₂ penalty!");
+                
+                popupMessage = currentLang === 'zh'
+                  ? `💀 挑戰失敗！一題都沒答對\n遭罰增加 15 CO₂ 碳排！\n(碳排變更: +15 CO₂)`
+                  : `💀 Challenge failed! 0 correct\n+15 CO₂ penalty!\n(Carbon change: +15 CO₂)`;
+            }
+
+            await showModal(
+                popupTitle,
+                popupMessage,
+                [{ text: currentLang === 'zh' ? "確認" : "OK", value: 'ok', cssClass: 'primary' }]
+            );
+            break;
+          
+          case 'fate':
+            logInfo(currentLang === 'zh' ? "🌟 命運：準備進行「永續記憶卡」配對挑戰！" : "Fate: Prepare for the Memory Match Challenge!");
+            
+            const randomStageIdx = Math.floor(Math.random() * 4);
+            const memResult = await triggerMinigame(player, 'memoryGame.html', `&stage=${randomStageIdx}`);
+            
+            const matchedPairs = memResult.matched;
+            const memMoneyBonus = matchedPairs * 20;
+            const memCarbonReduction = matchedPairs * 5;
+            
+            player.money += memMoneyBonus;
+            applyCarbonEffect(player, -memCarbonReduction);
+            
+            let popupTitleMem = currentLang === 'zh' ? "🌟 記憶挑戰結算" : "🌟 Memory Challenge Result";
+            let popupMessageMem = currentLang === 'zh' 
+              ? `🎉 挑戰結束！成功配對 ${matchedPairs} 組\n獲得 $${memMoneyBonus} 並減少 ${memCarbonReduction} CO₂！\n(碳排變更: -${memCarbonReduction} CO₂)`
+              : `🎉 Challenge over! Matched ${matchedPairs} pairs\nEarned $${memMoneyBonus} & -${memCarbonReduction} CO₂!\n(Carbon change: -${memCarbonReduction} CO₂)`;
+            
+            if (memResult.retention > 0) {
+               popupMessageMem += currentLang === 'zh' ? `\n\n📊 記憶留存度：${memResult.retention} 分` : `\n\n📊 Retention Score: ${memResult.retention}`;
+            }
+
+            await showModal(popupTitleMem, popupMessageMem, [{ text: currentLang === 'zh' ? "確認" : "OK", value: 'ok', cssClass: 'primary' }]);
+            break;
+          case 'property':
+          case 'nature':
+            const ownerId = properties[cell.id];
+            if (ownerId === undefined) {
+              if (player.money >= cell.cost) {
+                logInfo(currentLang === 'zh' ? `請回答問題以獲取購買權！` : `Answer quiz to buy!`);
+                if (await askQuiz(player)) {
+                  const decision = await showModal(
+                    currentLang === 'zh' ? "🏠 購買地產？" : "🏠 Buy Property?",
+                    currentLang === 'zh' ? `購買 [${cell.name}]\n價格: $${cell.cost}\n碳排: +${cell.carbonEffect} CO₂\n\n你要購買嗎？` : `Buy [${cell.nameEn}]\nPrice: $${cell.cost}\nCarbon: +${cell.carbonEffect} CO₂\n\nBuy?`,
+                    [{ text: currentLang === 'zh' ? `購買` : `Buy`, value: 'buy', cssClass: 'primary' }, { text: currentLang === 'zh' ? "放棄" : "Skip", value: 'pass' }]
+                  );
+                  if (decision === 'buy') {
+                    player.money -= cell.cost;
+                    applyCarbonEffect(player, cell.carbonEffect);
+                    properties[cell.id] = player.id;
+                    document.getElementById(`cell-${cell.id}`).classList.add('owner-' + player.id);
+                    logInfo(currentLang === 'zh' ? `購買成功！` : `Bought successfully!`);
+                  }
+                }
+              } else { logInfo(currentLang === 'zh' ? `金錢不足無法購買。` : `Not enough money.`); }
+            } else if (ownerId !== player.id) {
+              let rent = cell.rent;
+              if (cell.group === 'public') {
+                const count = cellData.filter(c => c.group === 'public' && properties[c.id] === ownerId).length;
+                rent = [0, 25, 50, 100, 200, 300, 400][count];
+              }
+              player.money -= rent;
+              players[ownerId].money += rent;
+              logInfo(currentLang === 'zh' ? `支付租金 $${rent} 給 玩家 ${ownerId + 1}` : `Paid $${rent} rent to Player ${ownerId + 1}`);
+            }
+            break;
+          case 'tax':
+            player.money += cell.moneyEffect;
+            logInfo(currentLang === 'zh' ? `支付稅金 $${Math.abs(cell.moneyEffect)}` : `Paid tax $${Math.abs(cell.moneyEffect)}`);
+            break;
+          case 'free':
+            applyCarbonEffect(player, -20);
+            logInfo(currentLang === 'zh' ? "抵達碳匯中心，抵銷 20 CO₂！" : "At Carbon Sink! -20 CO₂");
+            break;
+          case 'goToJail':
+            player.position = JAIL_POSITION; player.isInJail = true;
+            movePlayerToken(player.id, player.position);
+            logInfo(currentLang === 'zh' ? "重大污染！被送往環評審查！" : "Major Pollution! Go to EIA!");
+            break;
+        }
+        updateUI();
+      }
+
+      function nextTurn() {
+        // 清空前一個玩家的骰子顯示
+        document.getElementById(`dice-display-${currentPlayerIndex}`).innerHTML = "";
+        
+        currentPlayerIndex = (currentPlayerIndex + 1) % NUM_PLAYERS;
+        updateUI(); 
+      }
+
+      function checkGameStatus(player) {
+        const isZh = (currentLang === 'zh');
+        if (player.money < 0 || player.carbon >= MAX_CARBON) {
+          alert(isZh ? `遊戲結束！\n\n玩家 ${player.id + 1} ${player.money < 0 ? '破產了' : '碳排超標'}！\n接下來請查看學習成效報告。` : `Game Over!\n\nPlayer ${player.id + 1} is ${player.money < 0 ? 'bankrupt' : 'over carbon limit'}!\nChecking learning report...`);
+          
+          // 鎖住所有按鈕
+          players.forEach(p => document.getElementById(`roll-button-${p.id}`).disabled = true);
+          
+          showLearningReport(); return false;
+        }
+        return true;
+      }
+
+      function showLearningReport() {
+        const isZh = (currentLang === 'zh');
+        let reportHtml = "";
+        players.forEach(p => {
+          const total = p.stats.totalQuestions;
+          const correct = p.stats.correctCount;
+          const rate = total === 0 ? 0 : Math.round((correct / total) * 100);
+          
+          reportHtml += `<div style="text-align:left; border-bottom:1px solid #ccc; padding-bottom:10px; margin-bottom:10px;">`;
+          reportHtml += `<h4><span style="display:inline-block;width:15px;height:15px;background-color:${p.tokenColor};margin-right:8px;vertical-align:middle;border:1px solid #ccc;"></span>${isZh ? '玩家' : 'Player'} ${p.id + 1}</h4>`;
+          reportHtml += `<p><b>${isZh ? '正確率' : 'Accuracy'}: ${rate}%</b> (${correct} / ${total})</p>`;
+          
+          if (p.stats.mistakes.length > 0) {
+            reportHtml += `<p style="color:#d32f2f; font-weight:bold; margin-bottom:5px;">${isZh ? '錯題回顧 (包含所有遊戲挑戰):' : 'Mistakes Review:'}</p>`;
+            reportHtml += `<ul style="font-size: 12px; padding-left: 20px; color: #333;">`;
+            p.stats.mistakes.forEach(m => {
+              reportHtml += `<li style="margin-bottom:5px;">Q: ${m.q}<br><span style="color:red;">❌ ${isZh?'誤答':'Your'}: ${m.yourAns}</span><br><span style="color:green;">✅ ${isZh?'正解':'Correct'}: ${m.correctAns}</span></li>`;
+            });
+            reportHtml += `</ul>`;
+          } else if (total > 0) { reportHtml += `<p style="color:green;">${isZh ? '🎉 全對！太棒了！' : '🎉 Perfect score!'}</p>`; } 
+          else { reportHtml += `<p style="color:#666;">${isZh ? '(尚未回答問題)' : '(No questions answered yet)'}</p>`; }
+          reportHtml += `</div>`;
+        });
+        document.getElementById('modal-title').textContent = isZh ? "📊 學習成效報告" : "📊 Learning Report";
+        document.getElementById('modal-message').innerHTML = `<div style="max-height: 400px; overflow-y: auto;">${reportHtml}</div>`;
+        const modalButtons = document.getElementById('modal-buttons');
+        modalButtons.innerHTML = `<button class="modal-btn primary" onclick="document.getElementById('modal-overlay').classList.add('modal-hidden'); document.getElementById('modal').classList.add('modal-hidden');">${isZh ? "關閉" : "Close"}</button>`;
+        modalOverlay.classList.remove('modal-hidden'); modal.classList.remove('modal-hidden');
+      }
+
+      function initGame() {
+        shuffleQuestionDeck();
+        for (let i = 0; i < NUM_PLAYERS; i++) {
+          players.push({ id: i, money: 1000, carbon: 0, position: 0, isInJail: false, tokenColor: playerColors[i], stats: { totalQuestions: 0, correctCount: 0, mistakes: [] } });
+          const token = document.createElement('div');
+          token.id = `player-${i}`; token.className = 'player'; token.style.backgroundColor = playerColors[i];
+          board.appendChild(token);
+          movePlayerToken(i, 0); 
+        }
+        
+        // 分別綁定兩邊按鈕的點擊事件
+        document.getElementById('roll-button-0').addEventListener('click', () => { if (currentPlayerIndex === 0) rollDice(); });
+        document.getElementById('roll-button-1').addEventListener('click', () => { if (currentPlayerIndex === 1) rollDice(); });
+        
+        document.getElementById('lang-toggle').addEventListener('click', () => applyLanguage(currentLang === 'zh' ? 'en' : 'zh'));
+        document.getElementById('report-button').addEventListener('click', showLearningReport);
+        document.getElementById('restart-button').addEventListener('click', () => location.reload());
+        
+        applyLanguage('zh');
+        updateUI();
+        logInfo("歡迎來到碳權大富翁！請玩家 1 擲骰子開始。");
+      }
+
+      initGame();
+    });
+</script>
+</body>
+</html>

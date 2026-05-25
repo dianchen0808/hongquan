@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>永續記憶卡挑戰</title>
+<script src="questions.js"></script>
+<style>
+  :root{
+    --ink:#1f2937; --muted:#64748b; --line:rgba(0,0,0,.12);
+    --brand:#0E63E6; --brand-dark:#0A47A1; --ok:#20B386; --bad:#ef4444;
+    --card:rgba(255, 255, 255, 0.9); --card-2:rgba(248, 250, 252, 0.85); --bg:#f1f5f9;
+    --aurora-1:#0E63E6; --aurora-2:#38bdf8; --aurora-3:#20B386; --aurora-4:#94a3b8;
+  }
+  
+  * { box-sizing: border-box; }
+  
+  html, body {
+    height: 100vh; /* 舊版回退 */
+    height: 100dvh; /* 動態視口高度 */
+    width: 100vw;
+    margin: 0; background: var(--bg); color: var(--ink); font-family: system-ui, sans-serif; 
+    overflow: hidden;
+    /* 封鎖瀏覽器預設滑動行為與手勢 */
+    overscroll-behavior: none;
+    touch-action: none;
+  }
+  
+  /* ====== 背景層 ====== */
+  .bg-img{ position:fixed; inset:0; z-index:0; background:url('background1.1.png') center/cover no-repeat; opacity:.35; filter:blur(2px); }
+  .stage{ position:fixed; inset:0; z-index:1; overflow:hidden; pointer-events:none; }
+  .cloud{ position:absolute; top:10%; left:-200px; width:180px; animation:moveCloud 40s linear infinite; }
+  @keyframes moveCloud{from{left:-200px}to{left:100%}}
+  .bg{position:fixed; inset:0; z-index:1; pointer-events:none;}
+  .blob{position:absolute; filter:blur(70px); opacity:.35; mix-blend-mode:screen; animation:float 16s ease-in-out infinite alternate;}
+  .b1{ width:55vw; height:55vw; left:-10vw; top:-12vh; background:radial-gradient(circle at 30% 30%, var(--aurora-1), transparent 55%); animation-duration:18s;}
+  .b2{ width:60vw; height:60vw; right:-15vw; top:-6vh; background:radial-gradient(circle at 70% 20%, var(--aurora-2), transparent 55%); animation-duration:22s;}
+  @keyframes float{0%{transform:translate3d(0,0,0) scale(1)}100%{transform:translate3d(2vw,-1.5vh,0) scale(1.05)}}
+  #bg-canvas{position:fixed; inset:0; z-index:5; pointer-events:none;}
+
+  /* ====== 遊戲機台 (橫向雙欄佈局) ====== */
+  .wrap {
+    display: flex;
+    flex-direction: row; /* 強制橫向排版 */
+    width: 100%; height: 100%;
+    padding: 12px; gap: 15px;
+    position: relative; z-index: 2;
+  }
+
+  /* --- 左側：中控資訊台 --- */
+  .info-panel {
+    width: 30vw; max-width: 280px; min-width: 220px;
+    background: var(--card-2);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 16px;
+    display: flex; flex-direction: column; gap: 12px;
+    backdrop-filter: blur(10px);
+    overflow-y: auto; /* 內容過多時可獨立滑動 */
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+  }
+
+  .info-panel h1 { font-size: 1.2rem; margin: 0; font-weight: 800; color: var(--brand-dark); line-height: 1.2;}
+  
+  .bar { height: 8px; background: rgba(0,0,0,0.1); border-radius: 999px; overflow: hidden; }
+  .bar>span { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--ok), #38bdf8); transition: width 1s linear;}
+  
+  .meta { display: flex; flex-direction: column; gap: 8px; }
+  .pill { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 0.9rem; display: flex; justify-content: space-between;}
+  
+  .info-panel h3 { color: var(--brand); margin: 5px 0 0 0; font-size: 1rem;}
+  .tip { font-size: 0.85rem; color: var(--muted); line-height: 1.4;}
+  hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { background: rgba(14,99,230,.14); border: 1px solid rgba(14,99,230,.35); color: var(--brand-dark); font-size: 0.75rem; border-radius: 999px; padding: 4px 8px; white-space: nowrap;}
+
+  /* --- 右側：卡片遊戲區 --- */
+  .game-area {
+    flex-grow: 1;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    position: relative;
+  }
+
+  .grid {
+    display: grid; gap: 1.5dvh; /* 動態間距 */
+    width: 100%; height: 100%;
+    max-height: 92dvh; /* 預留上下邊距 */
+    max-width: 92dvh;  /* 保持正方形 */
+    aspect-ratio: 1 / 1; /* 強制容器為正方形 */
+  }
+
+  /* ====== 卡片設計 ====== */
+  .card{position:relative;width:100%;height:100%;perspective:1200px;cursor:pointer;user-select:none;}
+  .inner{position:absolute;inset:0;transform-style:preserve-3d;transition:transform .3s cubic-bezier(0.4, 0.0, 0.2, 1); will-change: transform;}
+  .card.flipped .inner,.card.matched .inner{transform:rotateY(180deg)}
+  .face{position:absolute;inset:0;border-radius: 1.5dvh; display:flex; flex-direction: column; align-items:center; justify-content:center;backface-visibility:hidden;overflow:hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.15);}
+  .front{ background:linear-gradient(135deg,var(--brand),var(--brand-dark)); border:1px solid rgba(255,255,255,0.2); }
+  .front::after { content: '🌱'; font-size: max(2rem, 4dvh); opacity: 0.6;}
+  .back{ transform:rotateY(180deg); background:var(--card); border:1px solid var(--line);}
+  
+  /* 動態字體大小，確保橫屏極端情況下文字不會破版 */
+  .emoji{font-size: clamp(1.5rem, 6dvh, 40px); line-height:1; margin-bottom: 2px;}
+  .label{ text-align:center; font-size: clamp(0.7rem, 2dvh, 14px); color:var(--muted); padding:0 2px; font-weight:bold; line-height:1.1;}
+
+  /* ====== UI 彈窗 ====== */
+  .toast{ position:fixed; top: 20px; left:50%; transform:translateX(-50%) translateY(-20px); background:var(--card); color:var(--brand-dark); border:2px solid var(--brand); border-radius:12px; padding:10px 16px; font-size:1rem; opacity:0; transition:opacity .2s,transform .2s; z-index:100; box-shadow:0 4px 15px rgba(0,0,0,.2); font-weight:bold;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  
+  .overlay{position:fixed;inset:0;background:rgba(2,8,14,.85);display:flex; align-items:center;justify-content:center;padding:16px;z-index:30;backdrop-filter:blur(5px)}
+  .dialog{ background:var(--card); color:var(--ink); border-radius:20px; max-width:400px;width:100%;padding:25px; text-align:center; border:1px solid var(--line); box-shadow: 0 10px 40px rgba(0,0,0,0.6); max-height: 90dvh; overflow-y: auto;}
+  .dialog h2{margin:0 0 10px; color:var(--brand); font-size: 1.5rem;}
+  .dialog p{margin-bottom:20px; line-height:1.5; font-size: 1rem;}
+  
+  .btn{ background:linear-gradient(135deg,var(--brand),var(--brand-dark)); color:#fff; border:none; border-radius:12px; padding:12px 24px; font-weight:700; cursor:pointer; font-size:1.1rem; width:100%; box-shadow:0 6px 20px rgba(14,99,230,.3); transition: transform 0.1s;}
+  .btn:active{transform: scale(0.96);}
+  
+  .know{ position:absolute; bottom: 10px; left:50%; transform:translateX(-50%); background:rgba(255,255,255,0.95); border:1px solid var(--line); border-radius:14px; padding:10px 16px; display:none; max-width:90%; z-index:9; color:var(--ink); box-shadow:0 10px 25px rgba(0,0,0,.2); text-align:center; backdrop-filter: blur(5px);}
+  .know strong{ color:var(--brand); display: block; margin-bottom: 4px;}
+</style>
+</head>
+<body>
+<div class="bg-img"></div>
+<div class="stage"><img src="cloud.png" class="cloud" onerror="this.style.display='none'"></div>
+<div class="bg"><div class="blob b1"></div><div class="blob b2"></div></div>
+<canvas id="bg-canvas"></canvas>
+
+<div class="overlay" id="startGuide">
+  <div class="dialog">
+    <h2 id="guideTitle">遊戲說明</h2>
+    <p id="guideDesc">點擊翻牌，配對相同的圖示來解鎖永續知識！把握時間，步數越少分數越高喔！</p>
+    <button class="btn" id="startBtn">挑戰開始</button>
+  </div>
+</div>
+
+<div class="overlay" id="endOverlay" style="display:none;">
+  <div class="dialog">
+    <h2 id="resultTitle">時間到！</h2>
+    <p id="resultText"></p>
+    <button class="btn" id="closeBtn">返回大富翁</button>
+  </div>
+</div>
+
+<div class="wrap">
+  
+  <aside class="info-panel">
+    <header>
+      <h1 id="gameTitle">永續記憶卡挑戰</h1>
+    </header>
+    <div class="bar"><span id="timebar"></span></div>
+    <div class="meta">
+      <div class="pill"><span id="lblTime">時間</span> <b id="time">--</b></div>
+      <div class="pill"><span id="lblMoves">步數</span> <b id="moves">0</b></div>
+      <div class="pill"><span id="lblMatch">配對</span> <b><span id="matches">0</span> / <span id="pairs">--</span></b></div>
+    </div>
+    <hr>
+    <h3 id="lblMission">關卡任務</h3>
+    <div id="mission" class="tip" style="font-weight:bold; color:var(--brand-dark);"></div>
+    <hr>
+    <div class="tip"><span id="lblUnlock">已解鎖小卡</span>: <b id="unlocked">0</b>/<b id="need">--</b></div>
+    <div class="chips" id="progressChips"></div>
+  </aside>
+
+  <main class="game-area">
+    <div id="grid" class="grid"></div>
+    <div id="know" class="know"></div>
+  </main>
+  
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// --- 初始化參數 ---
+const urlParams = new URLSearchParams(window.location.search);
+const currentLang = urlParams.get('lang') || 'zh';
+const isZh = (currentLang === 'zh');
+const LV = parseInt(urlParams.get('stage')) || 0; 
+
+// --- UI 語言替換 ---
+document.getElementById('gameTitle').textContent = isZh ? "永續記憶卡挑戰" : "Sustainable Memory";
+document.getElementById('lblTime').textContent = isZh ? "時間" : "Time";
+document.getElementById('lblMoves').textContent = isZh ? "步數" : "Moves";
+document.getElementById('lblMatch').textContent = isZh ? "配對" : "Matches";
+document.getElementById('lblMission').textContent = isZh ? "關卡任務" : "Mission";
+document.getElementById('lblUnlock').textContent = isZh ? "已解鎖" : "Unlocked";
+
+document.getElementById('guideTitle').textContent = isZh ? "記憶配對挑戰" : "Memory Match Challenge";
+document.getElementById('guideDesc').innerHTML = isZh 
+    ? `即將進行：<b>${memoryGameLevels[LV].nameZh}</b><br><br>請在限時內翻牌找出相同的永續標籤，步數越少，大富翁獎勵越高！`
+    : `Stage: <b>${memoryGameLevels[LV].nameEn}</b><br><br>Find matching pairs before time runs out. Fewer moves = higher rewards!`;
+document.getElementById('startBtn').textContent = isZh ? "開始" : "Start";
+document.getElementById('closeBtn').textContent = isZh ? "返回大富翁" : "Return to Monopoly";
+
+// --- 遊戲邏輯變數 ---
+const levelData = memoryGameLevels[LV];
+let GRID_SIZE = levelData.size;
+let TIME_LIMIT = levelData.time;
+const FLIP_DELAY = 600;
+
+let deck = [];
+let first = null, second = null, lock = false;
+let moves = 0, matched = 0, timer = null, timeLeft = TIME_LIMIT;
+let discovered = new Set();
+let lastRetentionScore = 0;
+
+// --- DOM 元件 ---
+const gridEl = document.getElementById('grid');
+const timeEl = document.getElementById('time');
+const timebar = document.getElementById('timebar');
+const movesEl = document.getElementById('moves');
+const matchEl = document.getElementById('matches');
+const pairsEl = document.getElementById('pairs');
+const toastEl = document.getElementById('toast');
+const knowEl = document.getElementById('know');
+
+function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]] } return arr; }
+function showToast(msg){ toastEl.textContent = msg; toastEl.classList.add('show'); setTimeout(()=>toastEl.classList.remove('show'),1500); }
+
+function showKnow(labelZh, labelEn){
+  const item = memoryGameBank.find(x => x.labelZh === labelZh);
+  if(!item) return;
+  const label = isZh ? item.labelZh : item.labelEn;
+  const tip = isZh ? item.tipZh : item.tipEn;
+  knowEl.innerHTML = `<strong>${item.emoji} ${label}</strong>${tip}`;
+  knowEl.style.display='block';
+  setTimeout(()=>{ knowEl.style.display='none' }, 2600);
+}
+
+function makeDeck(){
+  const pairs = (GRID_SIZE * GRID_SIZE) / 2;
+  const stageCards = memoryGameBank.filter(c => c.stage === LV);
+  const base = shuffle([...stageCards]).slice(0, pairs);
+  
+  const doubled = base.flatMap((it, idx) => [
+    { ...it, id: idx + 'A' }, { ...it, id: idx + 'B' }
+  ]);
+  return shuffle(doubled);
+}
+
+function renderGrid(){
+  gridEl.innerHTML='';
+  // 動態設定格線：行與列都根據 GRID_SIZE 設定，確保呈現完美的矩陣
+  gridEl.style.gridTemplateColumns = `repeat(${GRID_SIZE}, 1fr)`;
+  gridEl.style.gridTemplateRows = `repeat(${GRID_SIZE}, 1fr)`;
+  
+  deck.forEach(card=>{
+    const cell = document.createElement('div');
+    cell.className='card';
+    cell.dataset.key = card.id;
+    cell.dataset.labelZh = card.labelZh;
+    cell.dataset.labelEn = card.labelEn;
+    
+    const displayLabel = isZh ? card.labelZh : card.labelEn;
+    cell.innerHTML = `
+      <div class="inner">
+        <div class="face front"></div>
+        <div class="face back">
+          <div class="emoji">${card.emoji}</div>
+          <div class="label">${displayLabel}</div>
+        </div>
+      </div>`;
+    cell.addEventListener('click', onFlip);
+    gridEl.appendChild(cell);
+  });
+}
+
+function onFlip(e){
+  const el = e.currentTarget;
+  if(lock || el.classList.contains('flipped') || el.classList.contains('matched')) return;
+  el.classList.add('flipped');
+
+  if(!first){ first = el; return; }
+  second = el; lock = true; moves++; movesEl.textContent = moves;
+
+  const same = first.dataset.key.replace(/[AB]/,'') === second.dataset.key.replace(/[AB]/,'');
+  if(same){
+    setTimeout(()=>{
+      first.classList.add('matched'); second.classList.add('matched');
+      matched++; matchEl.textContent = matched;
+
+      const labZh = first.dataset.labelZh;
+      const labEn = first.dataset.labelEn;
+      discovered.add(isZh ? labZh : labEn); 
+      renderChips(); 
+      showToast(isZh ? `解鎖：${labZh}` : `Unlocked: ${labEn}`); 
+      showKnow(labZh, labEn);
+
+      resetPick();
+      if(matched === deck.length/2) endGame(true);
+    }, 200);
+  }else{
+    setTimeout(()=>{ first.classList.remove('flipped'); second.classList.remove('flipped'); resetPick(); }, FLIP_DELAY);
+  }
+}
+function resetPick(){ first=null; second=null; lock=false; }
+
+function startTimer(){
+  timeLeft = TIME_LIMIT;
+  timeEl.textContent = `${timeLeft}s`;
+  timebar.style.width = '100%';
+  if(timer) clearInterval(timer);
+  timer = setInterval(()=>{
+    timeLeft--;
+    timeEl.textContent = `${timeLeft}s`;
+    timebar.style.width = Math.max(0,(timeLeft/TIME_LIMIT)*100)+'%';
+    if(timeLeft<=0){ clearInterval(timer); endGame(false); }
+  },1000);
+}
+
+function renderChips(){
+  const chipsEl = document.getElementById('progressChips');
+  chipsEl.innerHTML = '';
+  [...discovered].forEach(lab=>{
+    const chip = document.createElement('span'); chip.className='chip'; chip.textContent = lab; chipsEl.appendChild(chip);
+  });
+  document.getElementById('unlocked').textContent = discovered.size;
+}
+
+function startGame(){
+  document.getElementById('startGuide').style.display = 'none';
+  document.getElementById('mission').textContent = isZh ? levelData.descZh : levelData.descEn;
+  
+  deck = makeDeck(); 
+  document.getElementById('pairs').textContent = (deck.length/2);
+  document.getElementById('need').textContent = (deck.length/2);
+  renderGrid(); 
+  
+  document.querySelectorAll('.card').forEach(el=>el.classList.add('flipped'));
+  setTimeout(()=>{
+      document.querySelectorAll('.card').forEach(el=>el.classList.remove('flipped'));
+      startTimer();
+  }, 1500);
+}
+
+function endGame(win){
+  lock = true; clearInterval(timer);
+  
+  if (win) {
+    const totalPairs = deck.length / 2;
+    const efficiency = totalPairs / moves;
+    lastRetentionScore = Math.round(efficiency * 100);
+  }
+
+  document.getElementById('endOverlay').style.display = 'flex';
+  document.getElementById('resultTitle').textContent = win ? (isZh ? '挑戰成功 🎉' : 'Success 🎉') : (isZh ? '時間到！' : "Time's up!");
+  
+  let txt = win 
+    ? (isZh ? `太棒了！你用了 <b>${moves}</b> 步完成配對！<br><br>📊 記憶留存度：<b>${lastRetentionScore}</b> 分` : `Great! You finished in <b>${moves}</b> moves!<br><br>📊 Score: <b>${lastRetentionScore}</b>`)
+    : (isZh ? `很可惜，你完成了 <b>${matched}</b> 組配對。` : `You matched <b>${matched}</b> pairs.`);
+    
+  document.getElementById('resultText').innerHTML = txt;
+}
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+
+document.getElementById('closeBtn').addEventListener('click', ()=>{
+  window.parent.postMessage({
+      type: 'MEMORY_GAME_FINISHED',
+      matched: matched,
+      retention: lastRetentionScore
+  }, '*');
+});
+
+// 背景星空點點
+(function(){
+  const canvas = document.getElementById('bg-canvas'); if(!canvas) return;
+  const ctx = canvas.getContext('2d', { alpha:true });
+  let W=0, H=0;
+  function resize(){ W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
+  resize(); addEventListener('resize', resize);
+  
+  const items = [];
+  for(let i=0;i<30;i++){
+      items.push({ x: Math.random()*W, y: Math.random()*H, s: Math.random()*2+1, v: Math.random()*0.5+0.1 });
+  }
+  function step(){
+      ctx.clearRect(0,0,W,H);
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      items.forEach(p => {
+          p.y -= p.v; if(p.y < 0) p.y = H;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, Math.PI*2); ctx.fill();
+      });
+      requestAnimationFrame(step);
+  }
+  step();
+})();
+</script>
+</body>
+</html>

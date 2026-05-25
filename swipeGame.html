@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>塑戰速決挑戰</title>
+    <script src="questions.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; padding: 0;
+            width: 100vw; 
+            height: 100vh; /* 舊版瀏覽器 Fallback */
+            height: 100dvh; /* 動態視口高度 */
+            display: flex; justify-content: center; align-items: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-image: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url('Firefly_Gemini Flash.png');
+            background-size: cover; background-position: center;
+            overflow: hidden;
+            overscroll-behavior: none; 
+            touch-action: none; 
+        }
+
+        /* 左右提示圓圈：固定在兩側邊緣 */
+        .swipe-hint { position: absolute; top: 50%; transform: translateY(-50%); color: white; font-size: 1em; text-align: center; font-weight: bold; z-index: 10; pointer-events: none; }
+        .swipe-hint-left { left: 30px; }
+        .swipe-hint-right { right: 30px; }
+        .swipe-hint-icon { width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2em; margin-bottom: 5px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);}
+        .swipe-hint-left .swipe-hint-icon { background: #ff6b6b; }
+        .swipe-hint-right .swipe-hint-icon { background: #51cf66; }
+
+        /* 主容器：保留兩側安全距離以免遮擋提示，並設定最大寬高 */
+        .swipe-container { 
+            width: calc(100vw - 220px); /* 扣除左右兩側的 hint 寬度 */
+            max-width: 500px; 
+            min-width: 280px;
+            height: 85dvh; /* 動態高度，留白上下邊界 */
+            max-height: 600px;
+            display: flex; 
+            flex-direction: column;
+            position: relative; 
+            z-index: 20;
+        }
+
+        .swipe-header { text-align: center; margin-bottom: 15px; color: white; flex-shrink: 0; }
+        .swipe-header h2 { font-size: 1.8em; margin-bottom: 5px; text-shadow: 0 2px 4px rgba(0,0,0,0.5); margin-top: 0;}
+        .swipe-score { font-size: 1.1em; opacity: 0.9; }
+        .swipe-timer-container { width: 100%; height: 16px; background: rgba(255, 255, 255, 0.3); border-radius: 8px; overflow: hidden; margin-top: 10px; position: relative; }
+        .swipe-timer-bar { height: 100%; background: linear-gradient(90deg, #51cf66, #37b24d); transition: width 0.1s linear; }
+        
+        /* 卡片區域：自動填滿剩餘高度 */
+        .swipe-card-area { position: relative; width: 100%; flex-grow: 1; perspective: 1000px; margin-bottom: 2dvh; }
+        
+        .swipe-card {
+            position: absolute; width: 100%; height: 100%; background: white; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px 30px; cursor: grab; user-select: none; text-align: center; color: #333; transform-origin: 50% 100%;
+            will-change: transform; 
+        }
+        .swipe-card.dragging { cursor: grabbing; transition: none; }
+        
+        /* 圖片自適應高度，避免在橫向螢幕時被切斷或擠壓文字 */
+        .swipe-card-img { width: 100%; max-height: 35dvh; object-fit: contain; margin-bottom: 15px; border-radius: 10px; }
+        .swipe-card-text { font-size: 1.2em; line-height: 1.4; width: 100%; overflow-y: auto; }
+
+        .swipe-indicator { position: absolute; top: 20px; font-size: 2.5em; font-weight: bold; opacity: 0; transition: opacity 0.2s; pointer-events: none;}
+        .swipe-indicator-left { right: 20px; color: #ff6b6b; transform: rotate(15deg); border: 4px solid #ff6b6b; border-radius: 10px; padding: 5px; font-size: 1.2em;}
+        .swipe-indicator-right { left: 20px; color: #51cf66; transform: rotate(-15deg); border: 4px solid #51cf66; border-radius: 10px; padding: 5px; font-size: 1.2em;}
+        .swipe-card.showing-left .swipe-indicator-left { opacity: 1; }
+        .swipe-card.showing-right .swipe-indicator-right { opacity: 1; }
+
+        .swipe-toast {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background-color: #ff6b6b; color: white; padding: 12px 24px; border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3); z-index: 3000; font-size: 1em; font-weight: bold;
+            opacity: 0; transition: opacity 0.3s; pointer-events: none; text-align: center; white-space: nowrap;
+        }
+        .swipe-toast.correct { background-color: #51cf66; }
+        .swipe-toast.show { opacity: 1; }
+    </style>
+</head>
+<body>
+    <div class="swipe-hint swipe-hint-left">
+        <div class="swipe-hint-icon">✕</div><span id="swipe-text-wrong">錯誤</span>
+    </div>
+    <div class="swipe-hint swipe-hint-right">
+        <div class="swipe-hint-icon">✓</div><span id="swipe-text-correct">正確</span>
+    </div>
+
+    <div class="swipe-container">
+        <div class="swipe-header">
+            <h2 id="swipe-title">塑戰速決挑戰</h2>
+            <div class="swipe-score"><span id="swipe-progress-label">進度</span>: <span id="swipe-progress">0/3</span></div>
+            <div class="swipe-timer-container"><div class="swipe-timer-bar" id="swipe-timerBar"></div></div>
+        </div>
+        <div class="swipe-card-area" id="swipe-cardContainer"></div>
+    </div>
+    <div class="swipe-toast" id="swipe-toast"></div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const currentLang = urlParams.get('lang') || 'zh';
+        const numQuestions = parseInt(urlParams.get('num')) || 3;
+        
+        const isZh = (currentLang === 'zh');
+        document.getElementById('swipe-text-wrong').textContent = isZh ? "錯誤" : "False";
+        document.getElementById('swipe-text-correct').textContent = isZh ? "正確" : "True";
+        document.getElementById('swipe-title').textContent = isZh ? "塑戰速決挑戰" : "Swipe Challenge";
+        document.getElementById('swipe-progress-label').textContent = isZh ? "進度" : "Progress";
+
+        let correctCount = 0;
+        let mistakes = []; 
+        let currentIndex = 0;
+        let selectedQuestions = [];
+        
+        const TIME_PER_Q = 5;
+        let timeRemaining = TIME_PER_Q;
+        let timerInterval = null;
+        let toastTimer = null;
+
+        const cardContainer = document.getElementById('swipe-cardContainer');
+        const progressEl = document.getElementById('swipe-progress');
+        const timerBar = document.getElementById('swipe-timerBar');
+        const toast = document.getElementById('swipe-toast');
+
+        let isDragging = false;
+        let startX = 0, currentX = 0, currentCard = null;
+
+        function preloadImages() {
+            selectedQuestions.forEach(q => {
+                if (q.image) {
+                    const img = new Image();
+                    img.src = q.image;
+                }
+            });
+        }
+
+        function showToast(msg, isCorrect) {
+            toast.textContent = msg;
+            toast.className = `swipe-toast show ${isCorrect ? 'correct' : ''}`;
+            if(toastTimer) clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => toast.classList.remove('show'), 2000);
+        }
+
+        function startTimer() {
+            if(timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                timeRemaining -= 0.1;
+                if(timeRemaining <= 0) { timeRemaining = 0; handleTimeout(); }
+                updateTimerUI();
+            }, 100);
+        }
+
+        function updateTimerUI() {
+            const pct = (timeRemaining / TIME_PER_Q) * 100;
+            timerBar.style.width = `${pct}%`;
+            timerBar.style.background = timeRemaining <= 2 ? 'linear-gradient(90deg, #ff6b6b, #fa5252)' : 'linear-gradient(90deg, #51cf66, #37b24d)';
+        }
+
+        function handleTimeout() {
+            clearInterval(timerInterval);
+            if(!currentCard) return;
+            
+            showToast(isZh ? "時間到！算答錯囉！" : "Time's up! Counted as wrong!", false);
+            
+            const currentQ = selectedQuestions[currentIndex];
+            mistakes.push({
+                q: isZh ? currentQ.question : currentQ.questionEn,
+                yourAns: isZh ? "(超時)" : "(Timeout)",
+                correctAns: (isZh ? (currentQ.answer ? "正確" : "錯誤") : (currentQ.answer ? "True" : "False")) + ` - ${isZh ? currentQ.feedback : currentQ.feedbackEn}`
+            });
+
+            currentCard.style.transition = 'transform 0.4s ease-in';
+            currentCard.style.transform = `translateY(100vh) rotate(20deg)`;
+            setTimeout(nextQuestion, 400);
+        }
+
+        function handleStart(e) {
+            if (!currentCard) return;
+            if (e.type.includes('touch') && e.touches.length > 1) return;
+            
+            isDragging = true; currentCard.classList.add('dragging');
+            startX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+        }
+
+        function handleMove(e) {
+            if (!isDragging || !currentCard) return;
+            if (e.type.includes('touch') && e.touches.length > 1) return;
+            
+            currentX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+            const deltaX = currentX - startX;
+            currentCard.style.transform = `translateX(${deltaX}px) rotate(${deltaX * 0.05}deg)`;
+            
+            if (deltaX < -60) { currentCard.classList.add('showing-left'); currentCard.classList.remove('showing-right'); } 
+            else if (deltaX > 60) { currentCard.classList.add('showing-right'); currentCard.classList.remove('showing-left'); } 
+            else { currentCard.classList.remove('showing-left', 'showing-right'); }
+        }
+
+        function handleEnd() {
+            if (!isDragging || !currentCard) return;
+            isDragging = false; currentCard.classList.remove('dragging');
+            const deltaX = currentX - startX;
+            
+            // 閾值維持螢幕寬度的 25% 
+            const SWIPE_THRESHOLD = window.innerWidth * 0.25;
+            
+            if (Math.abs(deltaX) > SWIPE_THRESHOLD) {
+                clearInterval(timerInterval);
+                const userAnswer = deltaX > 0;
+                const currentQ = selectedQuestions[currentIndex];
+                const isCorrect = (userAnswer === currentQ.answer);
+
+                if (isCorrect) {
+                    correctCount++;
+                    showToast(`✅ ${isZh ? currentQ.feedback : currentQ.feedbackEn}`, true);
+                } else {
+                    mistakes.push({
+                        q: isZh ? currentQ.question : currentQ.questionEn,
+                        yourAns: isZh ? (userAnswer ? "正確" : "錯誤") : (userAnswer ? "True" : "False"),
+                        correctAns: (isZh ? (currentQ.answer ? "正確" : "錯誤") : (currentQ.answer ? "True" : "False")) + ` - ${isZh ? currentQ.feedback : currentQ.feedbackEn}`
+                    });
+                    showToast(`❌ ${isZh ? currentQ.feedback : currentQ.feedbackEn}`, false);
+                }
+
+                currentCard.style.transition = 'transform 0.3s ease-out';
+                currentCard.style.transform = `translateX(${deltaX > 0 ? window.innerWidth : -window.innerWidth}px) rotate(${deltaX > 0 ? 30 : -30}deg)`;
+                setTimeout(nextQuestion, 300);
+            } else {
+                currentCard.style.transition = 'transform 0.3s ease-out';
+                currentCard.style.transform = 'translateX(0) rotate(0)';
+                currentCard.classList.remove('showing-left', 'showing-right');
+                setTimeout(() => { if(currentCard) currentCard.style.transition = ''; }, 300);
+            }
+            startX = 0; currentX = 0;
+        }
+
+        function createCard() {
+            cardContainer.innerHTML = '';
+            const q = selectedQuestions[currentIndex];
+            progressEl.textContent = `${currentIndex + 1}/${selectedQuestions.length}`;
+            
+            const card = document.createElement('div');
+            card.className = 'swipe-card';
+            
+            const imageHtml = q.image ? `<img src="${q.image}" class="swipe-card-img" alt="Question Image">` : '';
+
+            card.innerHTML = `
+                <div class="swipe-indicator swipe-indicator-left">✕ ${isZh ? '錯誤' : 'False'}</div>
+                <div class="swipe-indicator swipe-indicator-right">✓ ${isZh ? '正確' : 'True'}</div>
+                ${imageHtml}
+                <div class="swipe-card-text">${isZh ? q.question : q.questionEn}</div>
+            `;
+            
+            cardContainer.appendChild(card);
+            currentCard = card;
+
+            card.addEventListener('mousedown', handleStart);
+            document.addEventListener('mousemove', handleMove);
+            document.addEventListener('mouseup', handleEnd);
+            card.addEventListener('touchstart', handleStart, {passive: false});
+            document.addEventListener('touchmove', handleMove, {passive: false});
+            document.addEventListener('touchend', handleEnd);
+
+            timeRemaining = TIME_PER_Q;
+            updateTimerUI();
+            startTimer();
+        }
+
+        function nextQuestion() {
+            if (currentCard) {
+                document.removeEventListener('mousemove', handleMove);
+                document.removeEventListener('mouseup', handleEnd);
+                document.removeEventListener('touchmove', handleMove);
+                document.removeEventListener('touchend', handleEnd);
+            }
+            currentIndex++;
+            if (currentIndex < selectedQuestions.length) {
+                createCard();
+            } else {
+                setTimeout(() => {
+                    window.parent.postMessage({
+                        type: 'SWIPE_GAME_FINISHED',
+                        score: correctCount,
+                        mistakes: mistakes,
+                        totalPlayed: selectedQuestions.length
+                    }, '*');
+                }, 800);
+            }
+        }
+
+        function init() {
+            let shuffled = [...swipeQuestionsBank].sort(() => 0.5 - Math.random());
+            selectedQuestions = shuffled.slice(0, numQuestions);
+            preloadImages(); 
+            createCard();
+        }
+
+        init();
+    </script>
+</body>
+</html>
